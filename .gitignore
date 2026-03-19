@@ -8,14 +8,23 @@
 *.so
 *.dylib
 
+# App generated
+generated_plugins/
+
+# binary
+/pvtr-gcp-cloud-storage
+
+# Log files
+*.log
+
+# Config files
+config.yml
+
 # Test binary, built with `go test -c`
 *.test
 
-# Code coverage profiles and other test artifacts
+# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
-coverage.*
-*.coverprofile
-profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
@@ -27,6 +36,19 @@ go.work.sum
 # env file
 .env
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Other
+.DS_Store
+.vscode
+
+# ai
+**/.claude/*.local.*
+
+# Terraform
+*.tfstate
+*.tfstate.*
+**/.terraform/
+**/.terraform.lock.hcl
+terraform.tfvars
+
+# project overrides
+!test_output/**/*.log

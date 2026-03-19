@@ -1,0 +1,23 @@
+loglevel: # default: info; options: trace | debug | info | warn | error
+write-directory: # default: evaluation_results 
+write: # default: true; false will disable writing the output to file
+output: # default: yaml; options: yaml | json | sarif
+services:
+  # if there are multiple entries here, multiple of the same or different plugins can be run via Privateer
+  # while running via debug, only one service can be run at a time, and must be specified using --service=<service_name>
+  #
+  # Replace the example service name below with your service id/name. Multiple services
+  # may be provided at the same level as separate map entries.
+  myService1: # unique name/id for the evaluation
+    plugin: pvtr-gcp-cloud-storage # required while running via Privateer
+
+    # The policy section may be set at the top level if assessing multiple services via privateer
+    policy:
+      catalogs: ["CCC.ObjStor"] # this is the first catalog the plugin is built for, but more may be developed later
+      applicability:
+        - tlp-amber
+        - tlp-red
+        - tlp-clear
+        - tlp-green
+    vars:
+      bucketname: my-gcs-bucket-name
