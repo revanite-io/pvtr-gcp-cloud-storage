@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    uses: github-community-projects/ospo-reusable-workflows/.github/workflows/release.yaml@5d90c7aff008ad7aa4a87b1e23849a5a8691e356 # v0.5.8
+    uses: github-community-projects/ospo-reusable-workflows/.github/workflows/release.yaml@a0cf79bd8756e0a9c1555bf4975eae7ce7a8e8dc # v0.6.0
     with:
       publish: true
       release-config-name: release-drafter.yml
@@ -36,7 +36,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           syft-version: v1.33.0
       - name: Run GoReleaser
