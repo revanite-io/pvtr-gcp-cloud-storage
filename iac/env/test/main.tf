@@ -15,7 +15,7 @@ provider "google" {
 }
 
 module "pvtr_gcp_cloud_storage" {
-  source = "../../terraform/modules/pvtr-gcp-cloud-storage"
+  source = "git::https://github.com/revanite-io/pvtr-terraform.git//modules/pvtr-gcp-cloud-storage?ref=9f8ca38296b4ad4b264b997ff6427285ca7aafdb" # v0.1.0
 
   region                        = var.region
   bucket_name                   = var.bucket_name
