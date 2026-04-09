@@ -1,6 +1,6 @@
 module github.com/revanite-io/pvtr-gcp-cloud-storage // Replace this globally with your module name
 
-go 1.25.1
+go 1.26.2
 
 require (
 	cloud.google.com/go/storage v1.61.3
