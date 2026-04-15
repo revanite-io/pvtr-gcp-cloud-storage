@@ -33,10 +33,28 @@ variable "soft_delete_retention_seconds" {
   default     = 604800
 }
 
+variable "kms_key_rotation_period" {
+  description = "Rotation period for the Cloud KMS key (e.g., '7776000s' = 90 days)"
+  type        = string
+  default     = "7776000s"
+}
+
 variable "log_retention_days" {
   description = "Number of days to retain objects in the log bucket"
   type        = number
   default     = 90
+}
+
+variable "manage_audit_config" {
+  description = "Whether to manage the project-level audit config for storage.googleapis.com"
+  type        = bool
+  default     = true
+}
+
+variable "force_destroy" {
+  description = "Allow Terraform to destroy buckets even if they contain objects"
+  type        = bool
+  default     = true
 }
 
 variable "labels" {
