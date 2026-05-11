@@ -55,6 +55,7 @@ changelog:
   disable: true
 
 release:
+  disable: true
   mode: keep-existing
 
 universal_binaries:
