@@ -4,8 +4,8 @@ go 1.26.2
 
 require (
 	cloud.google.com/go/storage v1.62.3
-	github.com/gemaraproj/go-gemara v0.5.0
-	github.com/privateerproj/privateer-sdk v1.27.0
+	github.com/gemaraproj/go-gemara v0.6.0
+	github.com/privateerproj/privateer-sdk v1.28.0
 )
 
 require (
