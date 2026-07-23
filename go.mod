@@ -3,9 +3,9 @@ module github.com/revanite-io/pvtr-gcp-cloud-storage // Replace this globally wi
 go 1.26.2
 
 require (
-	cloud.google.com/go/storage v1.63.1
+	cloud.google.com/go/storage v1.64.0
 	github.com/gemaraproj/go-gemara v0.8.0
-	github.com/privateerproj/privateer-sdk v1.31.3
+	github.com/privateerproj/privateer-sdk v1.32.0
 )
 
 require (
