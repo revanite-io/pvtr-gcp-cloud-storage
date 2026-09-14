@@ -58,6 +58,11 @@ jobs:
           go-version-file: go.mod
       - name: install pvtr
         # go install names the binary after the module: privateer, not pvtr.
+        # privateer can require a newer Go than this repo's go.mod (setup-go
+        # pins GOTOOLCHAIN=local to the go.mod version); auto lets go fetch
+        # the toolchain privateer needs for this step only.
+        env:
+          GOTOOLCHAIN: auto
         run: go install "github.com/privateerproj/privateer@${PVTR_VERSION}"
       # This rebuild is not byte-identical to the release-attested artifacts
       # (BuiltAt is stamped per build), so the hub's Sigstore bundle attests
