@@ -8,7 +8,10 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+    # pvtr publish looks for a binary named after the plugin id (PluginName in
+    # main.go); the shipped file must match the entrypoint.
+  - binary: pvtr-gcp-cloud-storage
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
