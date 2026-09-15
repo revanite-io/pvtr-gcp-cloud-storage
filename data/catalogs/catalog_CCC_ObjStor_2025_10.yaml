@@ -1,4 +1,4 @@
-title: ""
+title: "CCC Object Storage Controls"
 metadata:
   id: CCC.ObjStor
   type: ControlCatalog
@@ -12,8 +12,8 @@ metadata:
     highly scalable and often used in cloud environments due to its flexibility
     and accessibility.
   author:
-    id: ""
-    name: ""
+    id: FINOS-CCC
+    name: FINOS Common Cloud Controls
     type: Human
   mapping-references:
     - id: CCC.Core
