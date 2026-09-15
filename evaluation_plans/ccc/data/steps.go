@@ -249,53 +249,6 @@ func VersionsRetainedOnDeletion(payloadData any) (result gemara.Result, message 
 	return gemara.NeedsReview, "Versioning is enabled. Manual verification required to confirm that noncurrent versions are retained when an object is deleted, allowing recovery", confidence
 }
 
-// --- CN06: Access Logging ---
-
-// AccessLoggingConfigured verifies that access logs are stored in a separate data store.
-func AccessLoggingConfigured(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	payload, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return gemara.Unknown, message, confidence
-	}
-
-	if payload.Logging == nil || !payload.Logging.Enabled {
-		return gemara.Failed, "Bucket logging is not configured. Access logs are not being stored in a separate data store", confidence
-	}
-
-	if payload.Logging.LogBucket == "" {
-		return gemara.Failed, "Bucket logging is enabled but no target log bucket is specified", confidence
-	}
-
-	return gemara.Passed, "Bucket logging is configured, storing access logs in a separate bucket: " + payload.Logging.LogBucket, confidence
-}
-
-// LogBucketHighestSensitivity verifies that the log bucket is classified at the highest sensitivity level.
-func LogBucketHighestSensitivity(payloadData any) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
-	payload, message := reusable_steps.VerifyPayload(payloadData)
-	if message != "" {
-		return gemara.Unknown, message, confidence
-	}
-
-	if payload.Logging == nil || !payload.Logging.Enabled {
-		return gemara.NeedsReview, "Bucket logging is not configured. If Cloud Audit Logs are used for logging, manual verification required to confirm logs are classified at the highest sensitivity level", confidence
-	}
-
-	if payload.Logging.LogBucketLabels == nil {
-		return gemara.NeedsReview, "Log bucket labels not available. Manual verification required to confirm the log bucket is classified at the highest sensitivity level", confidence
-	}
-
-	sensitivity, ok := payload.Logging.LogBucketLabels["sensitivity"]
-	if !ok {
-		return gemara.Failed, "Log bucket does not have a 'sensitivity' label", confidence
-	}
-
-	if sensitivity != "high" {
-		return gemara.Failed, "Log bucket sensitivity label is '" + sensitivity + "', expected 'high'", confidence
-	}
-
-	return gemara.Passed, "Log bucket is labeled with sensitivity=high, classified at the highest sensitivity level", confidence
-}
-
 // --- CN07: MFA Delete ---
 
 // MfaDeleteSupported verifies that MFA Delete is available as a configuration option.
