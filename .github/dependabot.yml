@@ -4,7 +4,7 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     commit-message:
       prefix: "chore(deps)"
     labels: ["go", "dependencies"]
@@ -12,12 +12,13 @@ updates:
       dependencies:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
   - package-ecosystem: "terraform"
     directory: "/iac/env/test"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     commit-message:
       prefix: "chore(deps)"
     labels: ["terraform", "dependencies"]
@@ -25,12 +26,13 @@ updates:
       dependencies:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     commit-message:
       prefix: "chore(deps)"
     labels: ["github_actions", "dependencies"]
@@ -38,5 +40,6 @@ updates:
       dependencies:
         applies-to: version-updates
         update-types:
+          - "major"
           - "minor"
           - "patch"
