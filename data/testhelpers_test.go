@@ -28,6 +28,19 @@ type mockStorageClient struct {
 	// Default response/error when no bucket-specific entry exists
 	defaultResp *storage.BucketAttrs
 	defaultErr  error
+	// Object version listing
+	versionsResp []*storage.ObjectAttrs
+	versionsErr  error
+}
+
+func (m *mockStorageClient) ListObjectVersions(ctx context.Context, bucketName string, limit int) ([]*storage.ObjectAttrs, error) {
+	if m.versionsErr != nil {
+		return nil, m.versionsErr
+	}
+	if len(m.versionsResp) > limit {
+		return m.versionsResp[:limit], nil
+	}
+	return m.versionsResp, nil
 }
 
 func (m *mockStorageClient) GetBucketAttrs(ctx context.Context, bucketName string) (*storage.BucketAttrs, error) {

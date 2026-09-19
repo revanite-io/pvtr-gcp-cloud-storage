@@ -506,3 +506,113 @@ func TestMfaDeletionLogged(t *testing.T) {
 		})
 	}
 }
+
+// versionedPayload builds a versioning-enabled payload with the given
+// object-version sample.
+func versionedPayload(sample *d.ObjectVersionsData) d.Payload {
+	return d.Payload{
+		Versioning:     &d.VersioningData{Enabled: true},
+		ObjectVersions: sample,
+	}
+}
+
+func TestNewVersionOnModification_Evidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    any
+		wantResult gemara.Result
+	}{
+		{
+			name:       "modified object with history returns Passed",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 3, NoncurrentCount: 1, ModifiedWithHistory: 1}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "no noncurrent generations returns NeedsReview",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2}),
+			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "only deletion history returns NeedsReview",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2, NoncurrentCount: 1, DeletedRetained: 1}),
+			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "no sample data returns NeedsReview",
+			payload:    versionedPayload(nil),
+			wantResult: gemara.NeedsReview,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, _ := NewVersionOnModification(tt.payload)
+			if result != tt.wantResult {
+				t.Errorf("got %v, want %v", result, tt.wantResult)
+			}
+		})
+	}
+}
+
+func TestPreviousVersionsRecoverable_Evidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    any
+		wantResult gemara.Result
+	}{
+		{
+			name:       "noncurrent generations present returns Passed",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2, NoncurrentCount: 2}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "no noncurrent generations returns NeedsReview",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2}),
+			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "no sample data returns NeedsReview",
+			payload:    versionedPayload(nil),
+			wantResult: gemara.NeedsReview,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, _ := PreviousVersionsRecoverable(tt.payload)
+			if result != tt.wantResult {
+				t.Errorf("got %v, want %v", result, tt.wantResult)
+			}
+		})
+	}
+}
+
+func TestVersionsRetainedOnDeletion_Evidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    any
+		wantResult gemara.Result
+	}{
+		{
+			name:       "deleted object retained returns Passed",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2, NoncurrentCount: 1, DeletedRetained: 1}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "only modification history returns NeedsReview",
+			payload:    versionedPayload(&d.ObjectVersionsData{SampledCount: 2, NoncurrentCount: 1, ModifiedWithHistory: 1}),
+			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "no sample data returns NeedsReview",
+			payload:    versionedPayload(nil),
+			wantResult: gemara.NeedsReview,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, _ := VersionsRetainedOnDeletion(tt.payload)
+			if result != tt.wantResult {
+				t.Errorf("got %v, want %v", result, tt.wantResult)
+			}
+		})
+	}
+}

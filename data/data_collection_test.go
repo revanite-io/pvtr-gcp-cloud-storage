@@ -485,3 +485,65 @@ func TestLoadWithOptions_NoOrgPolicyClientLeavesNil(t *testing.T) {
 		t.Error("OrgPolicy should be nil without an org policy client")
 	}
 }
+
+// --- Object version sampling ---
+
+func TestLoadWithOptions_ObjectVersionSample(t *testing.T) {
+	attrs := newMockAttrs()
+	attrs.VersioningEnabled = true
+	deleted := time.Now()
+	mock := &mockStorageClient{
+		defaultResp: attrs,
+		versionsResp: []*storage.ObjectAttrs{
+			{Name: "modified.txt"},                   // live generation
+			{Name: "modified.txt", Deleted: deleted}, // noncurrent history
+			{Name: "removed.txt", Deleted: deleted},  // deleted, retained
+			{Name: "untouched.txt"},                  // live only
+		},
+	}
+
+	result, err := LoadWithOptions(testConfig("my-bucket"), WithStorageClient(mock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sample := result.(Payload).ObjectVersions
+	if sample == nil {
+		t.Fatal("ObjectVersions is nil")
+	}
+	if sample.SampledCount != 4 || sample.NoncurrentCount != 2 {
+		t.Errorf("SampledCount=%d NoncurrentCount=%d, want 4 and 2", sample.SampledCount, sample.NoncurrentCount)
+	}
+	if sample.ModifiedWithHistory != 1 {
+		t.Errorf("ModifiedWithHistory=%d, want 1", sample.ModifiedWithHistory)
+	}
+	if sample.DeletedRetained != 1 {
+		t.Errorf("DeletedRetained=%d, want 1", sample.DeletedRetained)
+	}
+}
+
+func TestLoadWithOptions_ObjectVersionsSkippedWhenVersioningDisabled(t *testing.T) {
+	attrs := newMockAttrs()
+	attrs.VersioningEnabled = false
+	mock := &mockStorageClient{defaultResp: attrs}
+	result, err := LoadWithOptions(testConfig("my-bucket"), WithStorageClient(mock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(Payload).ObjectVersions != nil {
+		t.Error("ObjectVersions should be nil when versioning is disabled")
+	}
+}
+
+func TestLoadWithOptions_ObjectVersionListErrorLeavesNil(t *testing.T) {
+	attrs := newMockAttrs()
+	attrs.VersioningEnabled = true
+	mock := &mockStorageClient{defaultResp: attrs, versionsErr: errors.New("list failed")}
+
+	result, err := LoadWithOptions(testConfig("my-bucket"), WithStorageClient(mock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(Payload).ObjectVersions != nil {
+		t.Error("ObjectVersions should be nil when listing fails")
+	}
+}
