@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	orgpolicy "cloud.google.com/go/orgpolicy/apiv2"
+	"cloud.google.com/go/orgpolicy/apiv2/orgpolicypb"
 	"cloud.google.com/go/storage"
 	"github.com/privateerproj/privateer-sdk/config"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Payload contains all GCS bucket data required for evaluation steps.
@@ -31,10 +35,38 @@ type Payload struct {
 	// Access logging configuration
 	Logging *LoggingData
 
+	// Organization Policy constraints relevant to this bucket's project.
+	// Nil when the effective policy could not be fetched (e.g. missing
+	// permission), which is distinct from a fetched-but-unrestricted policy.
+	OrgPolicy *OrgPolicyData
+
 	// Resource metadata
 	BucketName string
 	Location   string
 	Labels     map[string]string
+}
+
+// OrgPolicyData contains effective Organization Policy constraints.
+type OrgPolicyData struct {
+	// Effective policy for constraints/gcp.restrictCmekCryptoKeyProjects
+	RestrictCmekCryptoKeyProjects *ConstraintPolicy
+}
+
+// ConstraintPolicy summarizes an effective list-constraint policy.
+type ConstraintPolicy struct {
+	AllowAll      bool
+	DenyAll       bool
+	AllowedValues []string
+	DeniedValues  []string
+}
+
+// Restricted reports whether the constraint limits which values are allowed.
+// A policy that allows everything (explicitly or by default) is unrestricted.
+func (c *ConstraintPolicy) Restricted() bool {
+	if c == nil || c.AllowAll {
+		return false
+	}
+	return c.DenyAll || len(c.AllowedValues) > 0 || len(c.DeniedValues) > 0
 }
 
 // VersioningData contains GCS bucket versioning configuration.
@@ -96,7 +128,9 @@ func LoadWithOptions(cfg *config.Config, opts ...Option) (any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Create client if not injected
+	// Create real clients if none were injected. The Organization Policy
+	// client is optional: without it OrgPolicy stays nil and the affected
+	// steps report NeedsReview instead of a verdict.
 	if options.storageClient == nil {
 		client, err := storage.NewClient(ctx)
 		if err != nil {
@@ -104,6 +138,13 @@ func LoadWithOptions(cfg *config.Config, opts ...Option) (any, error) {
 		}
 		defer func() { _ = client.Close() }()
 		options.storageClient = &gcsClient{client: client}
+
+		if options.orgPolicyClient == nil {
+			if opClient, err := orgpolicy.NewClient(ctx); err == nil {
+				defer func() { _ = opClient.Close() }()
+				options.orgPolicyClient = &orgPolicyClient{client: opClient}
+			}
+		}
 	}
 
 	// Fetch bucket attributes (critical)
@@ -135,7 +176,59 @@ func LoadWithOptions(cfg *config.Config, opts ...Option) (any, error) {
 	// Access logging
 	payload.Logging = fetchLogging(ctx, options.storageClient, attrs)
 
+	// Organization Policy (non-critical: nil when unavailable)
+	payload.OrgPolicy = fetchOrgPolicy(ctx, options.orgPolicyClient, attrs.ProjectNumber)
+
 	return payload, nil
+}
+
+func fetchOrgPolicy(ctx context.Context, client OrgPolicyClient, projectNumber uint64) *OrgPolicyData {
+	if client == nil || projectNumber == 0 {
+		return nil
+	}
+
+	name := fmt.Sprintf("projects/%d/policies/gcp.restrictCmekCryptoKeyProjects", projectNumber)
+	policy, err := client.GetEffectivePolicy(ctx, name)
+	if err != nil {
+		// A constraint that has never been configured anywhere in the
+		// hierarchy comes back NotFound; that means its default applies,
+		// which for restrictCmekCryptoKeyProjects is allow-all.
+		if status.Code(err) == codes.NotFound {
+			return &OrgPolicyData{
+				RestrictCmekCryptoKeyProjects: &ConstraintPolicy{AllowAll: true},
+			}
+		}
+		return nil
+	}
+
+	return &OrgPolicyData{
+		RestrictCmekCryptoKeyProjects: summarizePolicy(policy),
+	}
+}
+
+// summarizePolicy flattens an effective list-constraint policy's rules into
+// a ConstraintPolicy. An effective policy with no rules applies the
+// constraint's default, which for restrictCmekCryptoKeyProjects is allow-all.
+func summarizePolicy(policy *orgpolicypb.Policy) *ConstraintPolicy {
+	summary := &ConstraintPolicy{}
+	if policy == nil || policy.GetSpec() == nil || len(policy.GetSpec().GetRules()) == 0 {
+		summary.AllowAll = true
+		return summary
+	}
+
+	for _, rule := range policy.GetSpec().GetRules() {
+		if rule.GetAllowAll() {
+			summary.AllowAll = true
+		}
+		if rule.GetDenyAll() {
+			summary.DenyAll = true
+		}
+		if values := rule.GetValues(); values != nil {
+			summary.AllowedValues = append(summary.AllowedValues, values.GetAllowedValues()...)
+			summary.DeniedValues = append(summary.DeniedValues, values.GetDeniedValues()...)
+		}
+	}
+	return summary
 }
 
 func fetchEncryption(attrs *storage.BucketAttrs) *EncryptionData {

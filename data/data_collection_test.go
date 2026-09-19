@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/orgpolicy/apiv2/orgpolicypb"
 	"cloud.google.com/go/storage"
 	"github.com/privateerproj/privateer-sdk/config"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func testConfig(bucketName string) *config.Config {
@@ -401,5 +404,84 @@ func TestLoadWithOptions_Labels(t *testing.T) {
 	}
 	if payload.Labels["env"] != "test" {
 		t.Errorf("Labels[env] = %q, want %q", payload.Labels["env"], "test")
+	}
+}
+
+// --- Organization Policy ---
+
+func orgPolicyTestOptions(op OrgPolicyClient) []Option {
+	attrs := newMockAttrs()
+	attrs.ProjectNumber = 123456
+	opts := []Option{WithStorageClient(&mockStorageClient{defaultResp: attrs})}
+	if op != nil {
+		opts = append(opts, WithOrgPolicyClient(op))
+	}
+	return opts
+}
+
+func TestLoadWithOptions_OrgPolicyRestricted(t *testing.T) {
+	mock := &mockOrgPolicyClient{
+		policy: &orgpolicypb.Policy{
+			Spec: &orgpolicypb.PolicySpec{
+				Rules: []*orgpolicypb.PolicySpec_PolicyRule{
+					{
+						Kind: &orgpolicypb.PolicySpec_PolicyRule_Values{
+							Values: &orgpolicypb.PolicySpec_PolicyRule_StringValues{
+								AllowedValues: []string{"under:projects/trusted"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := LoadWithOptions(testConfig("my-bucket"), orgPolicyTestOptions(mock)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := result.(Payload)
+	constraint := payload.OrgPolicy.RestrictCmekCryptoKeyProjects
+	if !constraint.Restricted() {
+		t.Error("constraint should be restricted")
+	}
+	if len(constraint.AllowedValues) != 1 || constraint.AllowedValues[0] != "under:projects/trusted" {
+		t.Errorf("AllowedValues = %v", constraint.AllowedValues)
+	}
+}
+
+func TestLoadWithOptions_OrgPolicyNotFoundMeansUnrestricted(t *testing.T) {
+	mock := &mockOrgPolicyClient{err: status.Error(codes.NotFound, "no policy")}
+
+	result, err := LoadWithOptions(testConfig("my-bucket"), orgPolicyTestOptions(mock)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := result.(Payload)
+	constraint := payload.OrgPolicy.RestrictCmekCryptoKeyProjects
+	if constraint == nil || !constraint.AllowAll || constraint.Restricted() {
+		t.Errorf("expected unrestricted allow-all summary, got %+v", constraint)
+	}
+}
+
+func TestLoadWithOptions_OrgPolicyErrorLeavesNil(t *testing.T) {
+	mock := &mockOrgPolicyClient{err: status.Error(codes.PermissionDenied, "denied")}
+
+	result, err := LoadWithOptions(testConfig("my-bucket"), orgPolicyTestOptions(mock)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(Payload).OrgPolicy != nil {
+		t.Error("OrgPolicy should be nil when the fetch fails")
+	}
+}
+
+func TestLoadWithOptions_NoOrgPolicyClientLeavesNil(t *testing.T) {
+	result, err := LoadWithOptions(testConfig("my-bucket"), orgPolicyTestOptions(nil)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(Payload).OrgPolicy != nil {
+		t.Error("OrgPolicy should be nil without an org policy client")
 	}
 }
