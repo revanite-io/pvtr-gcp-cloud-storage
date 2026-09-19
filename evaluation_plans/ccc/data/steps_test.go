@@ -8,6 +8,19 @@ import (
 	d "github.com/revanite-io/pvtr-gcp-cloud-storage/data"
 )
 
+// cmekPayloadWithPolicy builds a CMEK-enabled payload with the given
+// effective restrictCmekCryptoKeyProjects constraint.
+func cmekPayloadWithPolicy(constraint *d.ConstraintPolicy) d.Payload {
+	return d.Payload{
+		Encryption: &d.EncryptionData{
+			DefaultKMSKeyName: "projects/p/locations/l/keyRings/kr/cryptoKeys/k",
+		},
+		OrgPolicy: &d.OrgPolicyData{
+			RestrictCmekCryptoKeyProjects: constraint,
+		},
+	}
+}
+
 // --- PreventUntrustedKmsKeysForBucketRead ---
 
 func TestPreventUntrustedKmsKeysForBucketRead(t *testing.T) {
@@ -17,13 +30,28 @@ func TestPreventUntrustedKmsKeysForBucketRead(t *testing.T) {
 		wantResult gemara.Result
 	}{
 		{
-			name: "CMEK configured returns NeedsReview",
+			name: "CMEK configured, org policy unavailable returns NeedsReview",
 			payload: d.Payload{
 				Encryption: &d.EncryptionData{
 					DefaultKMSKeyName: "projects/p/locations/l/keyRings/kr/cryptoKeys/k",
 				},
 			},
 			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "CMEK with restricting org policy returns Passed",
+			payload:    cmekPayloadWithPolicy(&d.ConstraintPolicy{AllowedValues: []string{"under:projects/trusted"}}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "CMEK with deny-all org policy returns Passed",
+			payload:    cmekPayloadWithPolicy(&d.ConstraintPolicy{DenyAll: true}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "CMEK with unrestricted org policy returns Failed",
+			payload:    cmekPayloadWithPolicy(&d.ConstraintPolicy{AllowAll: true}),
+			wantResult: gemara.Failed,
 		},
 		{
 			name:       "no CMEK returns Failed",
@@ -55,13 +83,23 @@ func TestPreventUntrustedKmsKeysForBucketWrite(t *testing.T) {
 		wantResult gemara.Result
 	}{
 		{
-			name: "CMEK configured returns NeedsReview",
+			name: "CMEK configured, org policy unavailable returns NeedsReview",
 			payload: d.Payload{
 				Encryption: &d.EncryptionData{
 					DefaultKMSKeyName: "projects/p/locations/l/keyRings/kr/cryptoKeys/k",
 				},
 			},
 			wantResult: gemara.NeedsReview,
+		},
+		{
+			name:       "CMEK with restricting org policy returns Passed",
+			payload:    cmekPayloadWithPolicy(&d.ConstraintPolicy{AllowedValues: []string{"under:projects/trusted"}}),
+			wantResult: gemara.Passed,
+		},
+		{
+			name:       "CMEK with unrestricted org policy returns Failed",
+			payload:    cmekPayloadWithPolicy(&d.ConstraintPolicy{AllowAll: true}),
+			wantResult: gemara.Failed,
 		},
 		{
 			name:       "no CMEK returns Failed",

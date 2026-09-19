@@ -26,6 +26,7 @@ The plugin performs read-only operations. Minimum required roles:
 |------|-------|--------|
 | `roles/storage.objectViewer` | Bucket or project | Read bucket data, object metadata, and object data |
 | `roles/storage.legacyBucketReader` | Bucket or project | Read bucket metadata including IAM policy and logging config |
+| `roles/orgpolicy.policyViewer` | Project or organization | Read the effective `gcp.restrictCmekCryptoKeyProjects` constraint for the CN01 KMS key trust checks (optional; without it those checks report NeedsReview) |
 
 ## Installation
 

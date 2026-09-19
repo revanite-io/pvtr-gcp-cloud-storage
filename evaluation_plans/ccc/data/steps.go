@@ -3,6 +3,7 @@ package data
 import (
 	"github.com/gemaraproj/go-gemara"
 
+	rootdata "github.com/revanite-io/pvtr-gcp-cloud-storage/data"
 	"github.com/revanite-io/pvtr-gcp-cloud-storage/evaluation_plans/reusable_steps"
 )
 
@@ -20,11 +21,26 @@ func PreventUntrustedKmsKeysForBucketRead(payloadData any) (result gemara.Result
 		return gemara.Failed, "Bucket is not using customer-managed encryption (CMEK). Google-managed encryption does not allow KMS key trust enforcement", confidence
 	}
 
-	// In GCS, CMEK sets the default encryption key for the bucket.
-	// Reads decrypt using the key the object was encrypted with.
-	// To restrict which keys can be used, an Organization Policy constraint
-	// (constraints/gcp.restrictCmekCryptoKeyProjects) is required.
-	return gemara.NeedsReview, "CMEK is configured with key: " + payload.Encryption.DefaultKMSKeyName + ". Manual verification required to confirm Organization Policy restricts KMS key usage to trusted keys only", confidence
+	// In GCS, CMEK sets the default encryption key for the bucket. Which
+	// keys are trusted is governed by the Organization Policy constraint
+	// constraints/gcp.restrictCmekCryptoKeyProjects.
+	return evaluateCmekKeyTrust(payload, "CMEK is configured with key: "+payload.Encryption.DefaultKMSKeyName)
+}
+
+// evaluateCmekKeyTrust judges the effective restrictCmekCryptoKeyProjects
+// constraint for the bucket's project. The context prefix describes the
+// bucket's CMEK state and is prepended to every message.
+func evaluateCmekKeyTrust(payload rootdata.Payload, context string) (result gemara.Result, message string, confidence gemara.ConfidenceLevel) {
+	if payload.OrgPolicy == nil {
+		return gemara.NeedsReview, context + ". Organization Policy data is unavailable, so verify manually that constraints/gcp.restrictCmekCryptoKeyProjects limits KMS keys to trusted projects", confidence
+	}
+
+	constraint := payload.OrgPolicy.RestrictCmekCryptoKeyProjects
+	if !constraint.Restricted() {
+		return gemara.Failed, context + ", but constraints/gcp.restrictCmekCryptoKeyProjects does not restrict which projects may supply KMS keys, so untrusted keys are not prevented", gemara.High
+	}
+
+	return gemara.Passed, context + " and constraints/gcp.restrictCmekCryptoKeyProjects restricts KMS keys to trusted projects", gemara.High
 }
 
 // PreventUntrustedKmsKeysForObjectRead verifies that object read requests use a trusted KMS key.
@@ -45,7 +61,7 @@ func PreventUntrustedKmsKeysForBucketWrite(payloadData any) (result gemara.Resul
 
 	// GCS CMEK sets the default key, but per-object overrides are possible
 	// unless restricted by Organization Policy.
-	return gemara.NeedsReview, "CMEK is configured with key: " + payload.Encryption.DefaultKMSKeyName + ". Manual verification required to confirm Organization Policy prevents writes with untrusted KMS keys", confidence
+	return evaluateCmekKeyTrust(payload, "CMEK is configured with key: "+payload.Encryption.DefaultKMSKeyName)
 }
 
 // PreventUntrustedKmsKeysForObjectWrite verifies that object write requests use a trusted KMS key.

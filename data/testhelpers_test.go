@@ -4,8 +4,22 @@ import (
 	"context"
 	"time"
 
+	"cloud.google.com/go/orgpolicy/apiv2/orgpolicypb"
 	"cloud.google.com/go/storage"
 )
+
+// mockOrgPolicyClient satisfies OrgPolicyClient for tests.
+type mockOrgPolicyClient struct {
+	policy *orgpolicypb.Policy
+	err    error
+}
+
+func (m *mockOrgPolicyClient) GetEffectivePolicy(ctx context.Context, name string) (*orgpolicypb.Policy, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.policy, nil
+}
 
 // mockStorageClient satisfies StorageClient for tests.
 type mockStorageClient struct {
