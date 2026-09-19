@@ -6,11 +6,15 @@ import (
 	orgpolicy "cloud.google.com/go/orgpolicy/apiv2"
 	"cloud.google.com/go/orgpolicy/apiv2/orgpolicypb"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 )
 
 // StorageClient abstracts the GCS client for testing.
 type StorageClient interface {
 	GetBucketAttrs(ctx context.Context, bucketName string) (*storage.BucketAttrs, error)
+	// ListObjectVersions returns object entries including noncurrent
+	// generations, up to limit entries.
+	ListObjectVersions(ctx context.Context, bucketName string, limit int) ([]*storage.ObjectAttrs, error)
 }
 
 // OrgPolicyClient abstracts the Organization Policy client for testing.
@@ -44,6 +48,22 @@ type gcsClient struct {
 
 func (c *gcsClient) GetBucketAttrs(ctx context.Context, bucketName string) (*storage.BucketAttrs, error) {
 	return c.client.Bucket(bucketName).Attrs(ctx)
+}
+
+func (c *gcsClient) ListObjectVersions(ctx context.Context, bucketName string, limit int) ([]*storage.ObjectAttrs, error) {
+	it := c.client.Bucket(bucketName).Objects(ctx, &storage.Query{Versions: true})
+	var entries []*storage.ObjectAttrs
+	for len(entries) < limit {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, attrs)
+	}
+	return entries, nil
 }
 
 // orgPolicyClient wraps the real Organization Policy client.

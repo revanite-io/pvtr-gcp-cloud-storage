@@ -40,10 +40,24 @@ type Payload struct {
 	// permission), which is distinct from a fetched-but-unrestricted policy.
 	OrgPolicy *OrgPolicyData
 
+	// Sampled object generation evidence for the versioning checks.
+	// Nil when versioning is disabled or the sample could not be listed.
+	ObjectVersions *ObjectVersionsData
+
 	// Resource metadata
 	BucketName string
 	Location   string
 	Labels     map[string]string
+}
+
+// ObjectVersionsData summarizes a sample of the bucket's object generations.
+// Counts are derived from a bounded listing with versions included, so they
+// are evidence of observed behavior, not a full inventory.
+type ObjectVersionsData struct {
+	SampledCount        int // total entries sampled (live + noncurrent)
+	NoncurrentCount     int // entries that are noncurrent generations
+	ModifiedWithHistory int // object names with a live generation plus noncurrent history
+	DeletedRetained     int // object names with only noncurrent generations (deleted but retained)
 }
 
 // OrgPolicyData contains effective Organization Policy constraints.
@@ -179,7 +193,57 @@ func LoadWithOptions(cfg *config.Config, opts ...Option) (any, error) {
 	// Organization Policy (non-critical: nil when unavailable)
 	payload.OrgPolicy = fetchOrgPolicy(ctx, options.orgPolicyClient, attrs.ProjectNumber)
 
+	// Object generation sample (non-critical: nil when unavailable)
+	if attrs.VersioningEnabled {
+		payload.ObjectVersions = fetchObjectVersions(ctx, options.storageClient, bucketName)
+	}
+
 	return payload, nil
+}
+
+// objectVersionSampleLimit bounds the generation listing so large buckets do
+// not stall the loader; the sample only needs to observe versioning behavior.
+const objectVersionSampleLimit = 1000
+
+func fetchObjectVersions(ctx context.Context, client StorageClient, bucketName string) *ObjectVersionsData {
+	entries, err := client.ListObjectVersions(ctx, bucketName, objectVersionSampleLimit)
+	if err != nil {
+		return nil
+	}
+
+	type nameHistory struct {
+		live       bool
+		noncurrent int
+	}
+	histories := map[string]*nameHistory{}
+
+	sample := &ObjectVersionsData{SampledCount: len(entries)}
+	for _, entry := range entries {
+		history := histories[entry.Name]
+		if history == nil {
+			history = &nameHistory{}
+			histories[entry.Name] = history
+		}
+		// A noncurrent generation has its deletion (supersession) time set.
+		if entry.Deleted.IsZero() {
+			history.live = true
+		} else {
+			history.noncurrent++
+			sample.NoncurrentCount++
+		}
+	}
+
+	for _, history := range histories {
+		if history.noncurrent == 0 {
+			continue
+		}
+		if history.live {
+			sample.ModifiedWithHistory++
+		} else {
+			sample.DeletedRetained++
+		}
+	}
+	return sample
 }
 
 func fetchOrgPolicy(ctx context.Context, client OrgPolicyClient, projectNumber uint64) *OrgPolicyData {
