@@ -57,10 +57,10 @@ jobs:
         with:
           go-version-file: go.mod
       - name: install pvtr
-        # go install names the binary after the module: privateer, not pvtr.
-        # privateer can require a newer Go than this repo's go.mod (setup-go
+        # go install names the binary after the module path's last element: pvtr.
+        # pvtr can require a newer Go than this repo's go.mod (setup-go
         # pins GOTOOLCHAIN=local to the go.mod version); auto lets go fetch
-        # the toolchain privateer needs for this step only.
+        # the toolchain pvtr needs for this step only.
         env:
           GOTOOLCHAIN: auto
         run: go install "github.com/privateerproj/pvtr@${PVTR_VERSION}"
@@ -86,4 +86,4 @@ jobs:
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience_uri}" | jq -er '.value // empty')
           echo "::add-mask::${PVTR_TOKEN}"
           export PVTR_TOKEN
-          privateer publish
+          pvtr publish
