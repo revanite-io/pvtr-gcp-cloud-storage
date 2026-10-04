@@ -1,0 +1,81 @@
+---
+name: "Publish OSPS Baseline results to grc.store"
+
+# Scans this repository against the OSPS Baseline with the openssf/github-repo
+# plugin and publishes the signed EvaluationLog to grc.store, where it shows
+# up on the target page for jmeridth/pvtr-gcp-cloud-storage.
+#
+# Runs on main only: the hub trusts this repo as a CI publisher for the
+# jmeridth namespace at refs/heads/main, and refuses a run from any other ref.
+# Weekly, not per commit: every published run is a permanent coordinate, and
+# the hub stores one log per target and catalog every ten minutes.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Run the scan but publish nothing (bundles land in the pvtr-bundles artifact)"
+        type: boolean
+        default: true
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions: {}
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Read the latest release tag
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: latest release
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  results:
+    name: results
+    needs: version
+    permissions:
+      contents: read # The scanner reads this repository through the job token
+      id-token: write # Trusted publishing to the hub and the Sigstore signing identity
+      # The called workflow's report job requests it, and GitHub checks every
+      # called job at startup, even one that upload-sarif: false skips.
+      security-events: write
+    # Pinned by tag, not SHA, on purpose: the hub compares the signing
+    # certificate's workflow ref to this exact tag and rejects a SHA-pinned
+    # call. Preview trusts v1.0.0-rc; switch to @v1 and drop `hub` for prod.
+    uses: revanite-io/pvtr-publish-results/.github/workflows/publish.yml@v1.0.0-rc # zizmor: ignore[unpinned-uses] the hub requires the tag
+    with:
+      hub: https://hub.preview.grc.store
+      target: jmeridth/pvtr-gcp-cloud-storage@${{ needs.version.outputs.version }}
+      license: CC0-1.0
+      # A scheduled run has no inputs; it publishes.
+      dry-run: ${{ inputs.dry-run == true }}
+    secrets:
+      # Inline because the plugin's token can only come from its config vars.
+      # The job token is read-only and scoped to this repository, so settings
+      # the scanner can't read (admin, org MFA) report "needs review".
+      # revanite-io/pvtr-publish-results#10 tracks octo-sts support.
+      config: |
+        targets:
+          pvtr-gcp-cloud-storage:
+            plugin: openssf/github-repo
+            policy:
+              catalogs:
+                - osps-baseline
+              applicability:
+                - maturity-1
+            vars:
+              owner: revanite-io
+              repo: pvtr-gcp-cloud-storage
+              token: ${{ secrets.GITHUB_TOKEN }}
