@@ -53,10 +53,10 @@ jobs:
       security-events: write
     # Pinned by tag, not SHA, on purpose: the hub compares the signing
     # certificate's workflow ref to this exact tag and rejects a SHA-pinned
-    # call. Preview trusts v1.0.0-rc2; switch to @v1 and drop `hub` for prod.
-    uses: revanite-io/pvtr-publish-results/.github/workflows/publish.yml@v1.0.0-rc2 # zizmor: ignore[unpinned-uses] the hub requires the tag
+    # call. The default hub (https://hub.grc.store) trusts v1, an immutable
+    # release.
+    uses: revanite-io/pvtr-publish-results/.github/workflows/publish.yml@v1 # zizmor: ignore[unpinned-uses] the hub requires the tag
     with:
-      hub: https://hub.preview.grc.store
       target: jmeridth/pvtr-gcp-cloud-storage@${{ needs.version.outputs.version }}
       license: CC0-1.0
       # A scheduled run has no inputs; it publishes.
