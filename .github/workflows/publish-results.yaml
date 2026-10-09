@@ -3,10 +3,10 @@ name: "Publish OSPS Baseline results to grc.store"
 
 # Scans this repository against the OSPS Baseline with the openssf/github-repo
 # plugin and publishes the signed EvaluationLog to grc.store, where it shows
-# up on the target page for jmeridth/pvtr-gcp-cloud-storage.
+# up on the target page for privateer/pvtr-gcp-cloud-storage.
 #
 # Runs on main only: the hub trusts this repo as a CI publisher for the
-# jmeridth namespace at refs/heads/main, and refuses a run from any other ref.
+# privateer namespace at refs/heads/main, and refuses a run from any other ref.
 # Weekly, not per commit: every published run is a permanent coordinate, and
 # the hub stores one log per target and catalog every ten minutes.
 on:
@@ -57,7 +57,7 @@ jobs:
     # release.
     uses: revanite-io/pvtr-publish-results/.github/workflows/publish.yml@v1 # zizmor: ignore[unpinned-uses] the hub requires the tag
     with:
-      target: jmeridth/pvtr-gcp-cloud-storage@${{ needs.version.outputs.version }}
+      target: privateer/pvtr-gcp-cloud-storage@${{ needs.version.outputs.version }}
       license: CC0-1.0
       # A scheduled run has no inputs; it publishes.
       dry-run: ${{ inputs.dry-run == true }}
