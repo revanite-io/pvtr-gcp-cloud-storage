@@ -10,10 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        # goreleaser (without --snapshot) refuses anything but an exact tag,
-        # so promise only what a dispatch can deliver.
-        description: "Tag to build and publish (e.g. v0.2.0)"
-        required: true
+        description: "Tag to publish (e.g. v0.2.0). Leave empty for the latest release."
+        required: false
+        default: ""
       hub-url:
         description: "grc.store hub to publish to"
         required: true
@@ -36,7 +35,8 @@ jobs:
     name: publish
     runs-on: ubuntu-latest
     permissions:
-      contents: read # Clone the repository at the release tag
+      contents: read # Clone the repository at the release tag, read releases
+      actions: read # Download the Release run's release-dist artifact
       # Mints two distinct OIDC tokens: the hub push token (audience =
       # ci_audience) and the Sigstore signing identity (audience = sigstore,
       # requested by pvtr itself). The hub must list this repo as a
@@ -49,9 +49,32 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
+      - name: resolve tag and release build
+        id: release
+        # An empty tag means the latest release. The Release workflow uploads
+        # its GoReleaser dist dir as `release-dist` (kept 1 day); reusing it
+        # skips a rebuild of every platform, and the hub then attests the same
+        # bytes the GitHub release did. No such artifact (expired, or a tag
+        # released some other way) falls back to rebuilding below.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}"
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq .sha)
+          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&status=success&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "Release")][0].id // empty')
+          if [ -n "$run_id" ] && ! gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+            --jq '.artifacts[] | select(.name == "release-dist" and (.expired | not)) | .id' | grep -q .; then
+            run_id=""
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "run-id=${run_id}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${tag} (${sha}); release build: ${run_id:-none, rebuilding}"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ steps.release.outputs.tag }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -64,12 +87,24 @@ jobs:
         env:
           GOTOOLCHAIN: auto
         run: go install "github.com/privateerproj/pvtr@${PVTR_VERSION}"
-      # This rebuild is not byte-identical to the release-attested artifacts
-      # (BuiltAt is stamped per build), so the hub's Sigstore bundle attests
-      # these bytes, not the GitHub release's. `pvtr publish --dist` needs a
-      # GoReleaser dist dir (artifacts.json + metadata.json), which release
-      # assets don't carry.
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      - name: download the release build
+        if: steps.release.outputs.run-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dist
+          path: dist
+          run-id: ${{ steps.release.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: restore execute bits
+        # Artifacts don't keep file modes, and pvtr runs the host binary to
+        # read its publish manifest.
+        if: steps.release.outputs.run-id != ''
+        run: find dist -mindepth 2 -type f -exec chmod +x {} +
+      # Fallback only. A rebuild is not byte-identical to the release-attested
+      # artifacts (BuiltAt is stamped per build), so the hub's Sigstore bundle
+      # then attests these bytes, not the GitHub release's.
+      - if: steps.release.outputs.run-id == ''
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: "~> v2"
           args: build --clean
